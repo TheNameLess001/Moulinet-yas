@@ -16,19 +16,10 @@ st.set_page_config(
 # --- 2. STYLE CSS PERSONNALISÉ (Thème Yassir) ---
 st.markdown("""
     <style>
-    /* Couleur de fond générale (optionnel, ici blanc pour la propreté) */
-    .stApp {
-        background-color: #ffffff;
-    }
-    
-    /* Titres en Violet Yassir */
-    h1, h2, h3 {
-        color: #4A148C !important;
-    }
-    
-    /* Style du Bouton "Lancer" */
+    .stApp { background-color: #ffffff; }
+    h1, h2, h3 { color: #4A148C !important; }
     div.stButton > button {
-        background-color: #4A148C; /* Violet foncé */
+        background-color: #4A148C;
         color: white;
         border-radius: 8px;
         padding: 10px 24px;
@@ -36,81 +27,81 @@ st.markdown("""
         border: none;
         width: 100%;
     }
-    div.stButton > button:hover {
-        background-color: #7c43bd; /* Violet plus clair au survol */
-        color: white;
-    }
-    
-    /* Style du pied de page (Signature) */
+    div.stButton > button:hover { background-color: #7c43bd; color: white; }
     .footer {
-        position: fixed;
-        left: 0;
-        bottom: 0;
-        width: 100%;
-        background-color: #f8f9fa;
-        color: #4A148C;
-        text-align: center;
-        padding: 15px;
-        font-size: 14px;
-        border-top: 3px solid #4A148C;
-        z-index: 100;
+        position: fixed; left: 0; bottom: 0; width: 100%;
+        background-color: #f8f9fa; color: #4A148C;
+        text-align: center; padding: 15px; font-size: 14px;
+        border-top: 3px solid #4A148C; z-index: 100;
     }
-    .footer a {
-        color: #4A148C;
-        font-weight: bold;
-        text-decoration: none;
-    }
-    
-    /* Espacement pour ne pas cacher le contenu derrière le footer */
-    .block-container {
-        padding-bottom: 100px;
-    }
+    .footer a { color: #4A148C; font-weight: bold; text-decoration: none; }
+    .block-container { padding-bottom: 100px; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 3. EN-TÊTE AVEC LOGO ---
+# --- 3. EN-TÊTE ---
 col1, col2, col3 = st.columns([1,2,1])
 with col2:
-    # URL publique du logo Yassir (ou mettre un fichier local "logo.png")
     try:
-        st.image("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS4umnB7rjE_AoR_VtRqiIIk-_8Dkqt771lZQ&s", width=200)
+        st.image("https://upload.wikimedia.org/wikipedia/commons/2/23/Yassir_Logo.svg", width=200)
     except:
-        st.title("YASSIR") # Fallback si l'image ne charge pas
+        st.title("YASSIR")
 
-st.markdown("<h3 style='text-align: center;'>Convertisseur d'Images (URL ➡️ PNG)</h3>", unsafe_allow_html=True)
+st.markdown("<h3 style='text-align: center;'>Convertisseur d'Images (Multi-Format)</h3>", unsafe_allow_html=True)
 
-# --- 4. LOGIQUE ET API ---
+# --- 4. LOGIQUE MÉTIER ---
 
-# Ta clé API (Hardcoded)
 API_KEY = "2caafdd6dc7859e3f4b10419752b96a0"
 
+def get_image_column(columns):
+    """Cherche une colonne qui s'appelle image/IMAGE/Image..."""
+    for col in columns:
+        if str(col).strip().lower() == "image":
+            return col
+    return None
+
 def upload_to_imagebb(image_bytes, api_key):
-    """Envoie l'image vers ImageBB et retourne le lien"""
     url = "https://api.imgbb.com/1/upload"
     b64_image = base64.b64encode(image_bytes).decode('utf-8')
     payload = {"key": api_key, "image": b64_image}
-    
     try:
-        response = requests.post(url, data=payload, timeout=20)
+        response = requests.post(url, data=payload, timeout=30)
         response.raise_for_status()
         return response.json()['data']['url']
     except Exception as e:
-        return f"Erreur: {str(e)}"
+        return f"Erreur" # Simplifié pour le tableau final
 
-# Upload du fichier
-uploaded_file = st.file_uploader("📂 Chargez votre fichier Excel", type=["xlsx"])
+# Upload acceptant CSV et EXCEL
+uploaded_file = st.file_uploader("📂 Chargez votre fichier (Excel ou CSV)", type=["xlsx", "csv"])
 
 if uploaded_file:
+    # Lecture intelligente du fichier
     try:
-        df = pd.read_excel(uploaded_file)
-    except:
-        st.error("Format de fichier invalide.")
+        if uploaded_file.name.endswith('.csv'):
+            # On essaie de lire, si ça échoue on tente avec le séparateur point-virgule (fréquent)
+            try:
+                df = pd.read_csv(uploaded_file)
+                # Petit hack : si on a 1 seule colonne avec des points-virgules dedans, on relit
+                if len(df.columns) == 1 and ';' in str(df.iloc[0,0]):
+                     uploaded_file.seek(0)
+                     df = pd.read_csv(uploaded_file, sep=';')
+            except:
+                uploaded_file.seek(0)
+                df = pd.read_csv(uploaded_file, sep=';')
+        else:
+            df = pd.read_excel(uploaded_file)
+    except Exception as e:
+        st.error(f"Impossible de lire le fichier. Erreur : {e}")
         st.stop()
         
-    if "image" not in df.columns:
-        st.error("🚨 La colonne 'image' est manquante.")
+    # Recherche de la colonne image (Insensible à la casse)
+    target_col = get_image_column(df.columns)
+
+    if not target_col:
+        st.error("🚨 Aucune colonne nommée 'image' (ou IMAGE, Image...) n'a été trouvée.")
+        st.write("Colonnes détectées :", list(df.columns))
     else:
-        st.info(f"📊 {len(df)} images détectées. Prêt pour la conversion.")
+        st.info(f"✅ Colonne détectée : **{target_col}** ({len(df)} lignes).")
         
         if st.button("🚀 Lancer la conversion"):
             
@@ -119,15 +110,21 @@ if uploaded_file:
             new_links = []
             
             for index, row in df.iterrows():
-                url = row['image']
-                status_text.text(f"Traitement de la ligne {index+1}...")
+                url = row[target_col]
+                status_text.text(f"Traitement {index+1}/{len(df)}...")
                 
+                # Vérification basique si c'est bien un lien
+                if pd.isna(url) or str(url).strip() == "":
+                    new_links.append("")
+                    continue
+
                 try:
-                    # Téléchargement & Conversion
-                    resp = requests.get(url, timeout=10)
+                    # Téléchargement
+                    resp = requests.get(str(url), timeout=10)
                     resp.raise_for_status()
-                    img = Image.open(io.BytesIO(resp.content))
                     
+                    # Conversion PNG
+                    img = Image.open(io.BytesIO(resp.content))
                     buffer = io.BytesIO()
                     img.save(buffer, format="PNG")
                     
@@ -136,30 +133,30 @@ if uploaded_file:
                     new_links.append(link)
                     
                 except Exception as e:
-                    new_links.append(f"Erreur")
+                    new_links.append("Erreur") # Ou garder l'ancien lien : new_links.append(url)
                 
                 progress_bar.progress((index + 1) / len(df))
-                time.sleep(0.3) 
+                time.sleep(0.2)
             
-            # --- REMPLACEMENT DE LA COLONNE ---
-            df['image'] = new_links
+            # Remplacement de la colonne existante
+            df[target_col] = new_links
             
-            status_text.success("✅ Conversion terminée avec succès !")
+            status_text.success("✅ Terminé !")
             progress_bar.empty()
             
-            # Export
+            # Export en Excel (toujours plus propre pour les liens)
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 df.to_excel(writer, index=False)
             
             st.download_button(
-                label="📥 Télécharger le fichier final",
+                label="📥 Télécharger le résultat (Excel)",
                 data=output.getvalue(),
-                file_name="resultat_yassir_png.xlsx",
+                file_name="resultat_yassir_final.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
-# --- 5. SIGNATURE (FOOTER) ---
+# --- 5. SIGNATURE ---
 st.markdown("""
     <div class="footer">
         <p>Developed by <b>Bounoir Saif Eddine</b><br>
