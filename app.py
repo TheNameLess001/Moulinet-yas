@@ -6,111 +6,163 @@ import io
 import base64
 import time
 
-# Configuration de la page
-st.set_page_config(page_title="Convertisseur PNG vers ImageBB", layout="centered")
+# --- 1. CONFIGURATION DE LA PAGE ---
+st.set_page_config(
+    page_title="Yassir - Convertisseur d'Images",
+    page_icon="🟣",
+    layout="centered"
+)
 
-st.title("⚡ Convertisseur & Hébergeur d'Images")
-st.markdown("Convertit les liens (JPG, WebP, etc.) en **PNG** et génère des liens **ImageBB**.")
+# --- 2. STYLE CSS PERSONNALISÉ (Thème Yassir) ---
+st.markdown("""
+    <style>
+    /* Couleur de fond générale (optionnel, ici blanc pour la propreté) */
+    .stApp {
+        background-color: #ffffff;
+    }
+    
+    /* Titres en Violet Yassir */
+    h1, h2, h3 {
+        color: #4A148C !important;
+    }
+    
+    /* Style du Bouton "Lancer" */
+    div.stButton > button {
+        background-color: #4A148C; /* Violet foncé */
+        color: white;
+        border-radius: 8px;
+        padding: 10px 24px;
+        font-weight: bold;
+        border: none;
+        width: 100%;
+    }
+    div.stButton > button:hover {
+        background-color: #7c43bd; /* Violet plus clair au survol */
+        color: white;
+    }
+    
+    /* Style du pied de page (Signature) */
+    .footer {
+        position: fixed;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        background-color: #f8f9fa;
+        color: #4A148C;
+        text-align: center;
+        padding: 15px;
+        font-size: 14px;
+        border-top: 3px solid #4A148C;
+        z-index: 100;
+    }
+    .footer a {
+        color: #4A148C;
+        font-weight: bold;
+        text-decoration: none;
+    }
+    
+    /* Espacement pour ne pas cacher le contenu derrière le footer */
+    .block-container {
+        padding-bottom: 100px;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-# TA CLÉ API EST DÉJÀ CONFIGURÉE ICI
-DEFAULT_API_KEY = "2caafdd6dc7859e3f4b10419752b96a0"
+# --- 3. EN-TÊTE AVEC LOGO ---
+col1, col2, col3 = st.columns([1,2,1])
+with col2:
+    # URL publique du logo Yassir (ou mettre un fichier local "logo.png")
+    try:
+        st.image("https://upload.wikimedia.org/wikipedia/commons/2/23/Yassir_Logo.svg", width=200)
+    except:
+        st.title("YASSIR") # Fallback si l'image ne charge pas
 
-# On met la clé par défaut dans le champ, mais tu peux la modifier si besoin
-api_key = st.text_input("Clé API ImageBB", value=DEFAULT_API_KEY, type="password")
+st.markdown("<h3 style='text-align: center;'>Convertisseur d'Images (URL ➡️ PNG)</h3>", unsafe_allow_html=True)
 
-uploaded_file = st.file_uploader("Chargez votre fichier Excel (.xlsx)", type=["xlsx"])
+# --- 4. LOGIQUE ET API ---
+
+# Ta clé API (Hardcoded)
+API_KEY = "2caafdd6dc7859e3f4b10419752b96a0"
 
 def upload_to_imagebb(image_bytes, api_key):
-    """Envoie l'image binaire convertie vers ImageBB"""
+    """Envoie l'image vers ImageBB et retourne le lien"""
     url = "https://api.imgbb.com/1/upload"
-    
-    # Encodage en Base64 requis par l'API ImageBB
     b64_image = base64.b64encode(image_bytes).decode('utf-8')
-    
-    payload = {
-        "key": api_key,
-        "image": b64_image,
-    }
+    payload = {"key": api_key, "image": b64_image}
     
     try:
         response = requests.post(url, data=payload, timeout=20)
         response.raise_for_status()
-        data = response.json()
-        # Retourne le lien direct (url)
-        return data['data']['url'] 
+        return response.json()['data']['url']
     except Exception as e:
         return f"Erreur: {str(e)}"
 
-if uploaded_file and api_key:
-    # Lecture du fichier
+# Upload du fichier
+uploaded_file = st.file_uploader("📂 Chargez votre fichier Excel", type=["xlsx"])
+
+if uploaded_file:
     try:
         df = pd.read_excel(uploaded_file)
-    except Exception as e:
-        st.error(f"Erreur de lecture du fichier : {e}")
+    except:
+        st.error("Format de fichier invalide.")
         st.stop()
-    
-    # Vérification de la colonne
-    if "image" not in df.columns:
-        st.error("🚨 Erreur : La colonne 'image' est introuvable dans le fichier Excel.")
-    else:
-        st.info(f"{len(df)} liens trouvés. Prêt à convertir.")
         
-        if st.button("Lancer la conversion"):
+    if "image" not in df.columns:
+        st.error("🚨 La colonne 'image' est manquante.")
+    else:
+        st.info(f"📊 {len(df)} images détectées. Prêt pour la conversion.")
+        
+        if st.button("🚀 Lancer la conversion"):
             
             progress_bar = st.progress(0)
             status_text = st.empty()
-            
-            # Liste pour stocker les résultats dans l'ordre
-            final_links = []
+            new_links = []
             
             for index, row in df.iterrows():
                 url = row['image']
-                status_text.text(f"Traitement {index+1}/{len(df)}...")
+                status_text.text(f"Traitement de la ligne {index+1}...")
                 
                 try:
-                    # 1. Téléchargement de l'image source
+                    # Téléchargement & Conversion
                     resp = requests.get(url, timeout=10)
                     resp.raise_for_status()
-                    
-                    # 2. Conversion en PNG
                     img = Image.open(io.BytesIO(resp.content))
                     
-                    # On sauvegarde l'image convertie dans une mémoire tampon
                     buffer = io.BytesIO()
                     img.save(buffer, format="PNG")
-                    img_png_bytes = buffer.getvalue()
                     
-                    # 3. Envoi vers ImageBB
-                    link = upload_to_imagebb(img_png_bytes, api_key)
-                    final_links.append(link)
+                    # Upload
+                    link = upload_to_imagebb(buffer.getvalue(), API_KEY)
+                    new_links.append(link)
                     
                 except Exception as e:
-                    final_links.append(f"Erreur : {e}")
+                    new_links.append(f"Erreur")
                 
-                # Mise à jour de la barre de progression
                 progress_bar.progress((index + 1) / len(df))
-                
-                # Petite pause pour éviter de bloquer l'API
-                time.sleep(0.3)
-
-            # Fin du traitement
-            status_text.success("✅ Traitement terminé !")
+                time.sleep(0.3) 
+            
+            # --- REMPLACEMENT DE LA COLONNE ---
+            df['image'] = new_links
+            
+            status_text.success("✅ Conversion terminée avec succès !")
             progress_bar.empty()
             
-            # Ajout de la nouvelle colonne
-            df['image_png_link'] = final_links
-            
-            st.write("Aperçu du résultat :")
-            st.dataframe(df.head())
-            
-            # Préparation du téléchargement
+            # Export
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 df.to_excel(writer, index=False)
             
             st.download_button(
-                label="📥 Télécharger le fichier Excel final",
+                label="📥 Télécharger le fichier final",
                 data=output.getvalue(),
-                file_name="resultat_links_png.xlsx",
+                file_name="resultat_yassir_png.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
+
+# --- 5. SIGNATURE (FOOTER) ---
+st.markdown("""
+    <div class="footer">
+        <p>Developed by <b>Bounoir Saif Eddine</b><br>
+        Contact: <a href="mailto:saifeddine.bounoir@yassir.com">saifeddine.bounoir@yassir.com</a></p>
+    </div>
+""", unsafe_allow_html=True)
