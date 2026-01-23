@@ -32,7 +32,7 @@ st.markdown("""
 col1, col2, col3 = st.columns([1,2,1])
 with col2:
     try:
-        st.image("https://upload.wikimedia.org/wikipedia/commons/2/23/Yassir_Logo.svg", width=180)
+        st.image("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS4umnB7rjE_AoR_VtRqiIIk-_8Dkqt771lZQ&s", width=180)
     except:
         st.title("YASSIR")
 st.markdown("<h3 style='text-align: center;'>Convertisseur High-Speed (Multi-Thread)</h3>", unsafe_allow_html=True)
