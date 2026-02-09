@@ -32,7 +32,7 @@ st.markdown("""
 with st.sidebar:
     st.header("🔑 Paramètres API")
     api_key_input = st.text_input("Clé API ImgBB", type="password", help="Entrez votre clé API ImgBB pour activer la conversion.")
-    st.info("Vous pouvez obtenir une clé gratuite sur [imgbb.com](https://api.imgbb.com/)")
+    st.info("Vous pouvez obtenir une clé gratuite sur [https://api.imgbb.com/](https://api.imgbb.com/)")
 
 # --- HEADER ---
 col1, col2, col3 = st.columns([1,2,1])
