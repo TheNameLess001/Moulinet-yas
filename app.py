@@ -28,6 +28,12 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# --- SIDEBAR : CONFIGURATION API ---
+with st.sidebar:
+    st.header("🔑 Paramètres API")
+    api_key_input = st.text_input("Clé API ImgBB", type="password", help="Entrez votre clé API ImgBB pour activer la conversion.")
+    st.info("Vous pouvez obtenir une clé gratuite sur [imgbb.com](https://api.imgbb.com/)")
+
 # --- HEADER ---
 col1, col2, col3 = st.columns([1,2,1])
 with col2:
@@ -39,13 +45,7 @@ st.markdown("<h3 style='text-align: center;'>Convertisseur High-Speed (Smart Det
 
 # --- FONCTIONS ---
 
-try:
-    API_KEY = st.secrets["imgbb_api_key"]
-except:
-    API_KEY = "2caafdd6dc7859e3f4b10419752b96a0" 
-
 def process_single_image(url, api_key, max_size=None):
-    """Télécharge -> Resize -> Convert -> Upload"""
     if pd.isna(url) or str(url).strip() == "":
         return ""
     
@@ -55,7 +55,7 @@ def process_single_image(url, api_key, max_size=None):
         resp.raise_for_status()
         img = Image.open(io.BytesIO(resp.content))
         
-        # 2. Resize (Optimisation)
+        # 2. Resize
         if max_size:
             img.thumbnail((max_size, max_size))
             
@@ -73,25 +73,23 @@ def process_single_image(url, api_key, max_size=None):
         return post_resp.json()['data']['url']
         
     except Exception:
-        return "Erreur" # En cas d'échec
+        return "Erreur"
 
 def get_image_column_smart(columns):
-    """
-    Cherche intelligemment une colonne.
-    Retourne la première colonne qui CONTIENT le mot 'image' (insensible à la casse).
-    Ex: 'Product Image' -> Match !
-    """
     for col in columns:
-        # On met tout en minuscule et on regarde si "image" est dedans
         if "image" in str(col).strip().lower():
             return col
     return None
 
 # --- UI PRINCIPALE ---
 
+# Vérification de la clé API avant de permettre l'upload
+if not api_key_input:
+    st.warning("⚠️ Veuillez saisir votre **Clé API ImgBB** dans la barre latérale pour commencer.")
+    st.stop()
+
 uploaded_file = st.file_uploader("📂 Chargez votre fichier (Excel/CSV)", type=["xlsx", "csv"])
 
-# Options cachées
 with st.expander("⚙️ Options avancées"):
     resize_option = st.checkbox("Redimensionner (Recommandé)", value=True)
     max_pixels = st.slider("Max pixels", 500, 2000, 1000) if resize_option else None
@@ -109,25 +107,20 @@ if uploaded_file:
         st.error(f"Erreur lecture: {e}")
         st.stop()
 
-    # Utilisation de la détection intelligente
     target_col = get_image_column_smart(df.columns)
 
     if target_col:
-        # On affiche quelle colonne a été trouvée pour rassurer l'utilisateur
         st.success(f"✅ Colonne identifiée : **'{target_col}'** ({len(df)} lignes)")
         
         if st.button("🚀 Lancer la conversion"):
-            
             progress_bar = st.progress(0)
             status_text = st.empty()
             
-            results = []
-            total = len(df)
             urls = df[target_col].tolist()
+            total = len(df)
             
-            # Multi-threading pour la vitesse
             with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-                futures = {executor.submit(process_single_image, url, API_KEY, max_pixels): index for index, url in enumerate(urls)}
+                futures = {executor.submit(process_single_image, url, api_key_input, max_pixels): index for index, url in enumerate(urls)}
                 
                 completed = 0
                 results_map = {}
@@ -136,15 +129,10 @@ if uploaded_file:
                     index = futures[future]
                     results_map[index] = future.result()
                     completed += 1
-                    
                     progress_bar.progress(completed / total)
                     status_text.text(f"Traitement : {completed}/{total}")
 
-            # Reconstitution ordonnée
-            final_links = [results_map[i] for i in range(total)]
-            
-            # Remplacement dans la colonne détectée
-            df[target_col] = final_links
+            df[target_col] = [results_map[i] for i in range(total)]
             
             status_text.success("⚡ Terminé !")
             progress_bar.empty()
@@ -161,10 +149,10 @@ if uploaded_file:
             )
     else:
         st.warning("⚠️ Impossible de trouver une colonne contenant le mot 'image'.")
-        st.write("Colonnes trouvées dans le fichier :", list(df.columns))
+        st.write("Colonnes trouvées :", list(df.columns))
 
 # --- FOOTER ---
-st.markdown("""
+st.markdown(f"""
     <div class="footer">
         <p>Developed by <b>Bounoir Saif Eddine</b> | Yassir Operations Tools<br>
         <a href="mailto:saifeddine.bounoir@yassir.com">saifeddine.bounoir@yassir.com</a></p>
